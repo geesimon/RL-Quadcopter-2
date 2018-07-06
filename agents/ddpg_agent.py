@@ -1,5 +1,12 @@
 from keras import layers, models, optimizers
 from keras import backend as K
+import random
+from collections import namedtuple, deque
+import numpy as np
+import copy
+from physics_sim import PhysicsSim
+
+#Add batch normalization, action repeat
 
 class Actor:
     """Actor (Policy) Model."""
@@ -120,7 +127,55 @@ class Critic:
             inputs=[*self.model.input, K.learning_phase()],
             outputs=action_gradients)
 
-class DDPG():
+class ReplayBuffer:
+    """Fixed-size buffer to store experience tuples."""
+
+    def __init__(self, buffer_size, batch_size):
+        """Initialize a ReplayBuffer object.
+        Params
+        ======
+            buffer_size: maximum size of buffer
+            batch_size: size of each training batch
+        """
+        self.memory = deque(maxlen=buffer_size)  # internal memory (deque)
+        self.batch_size = batch_size
+        self.experience = namedtuple("Experience", field_names=["state", "action", "reward", "next_state", "done"])
+
+    def add(self, state, action, reward, next_state, done):
+        """Add a new experience to memory."""
+        e = self.experience(state, action, reward, next_state, done)
+        self.memory.append(e)
+
+    def sample(self, batch_size=64):
+        """Randomly sample a batch of experiences from memory."""
+        return random.sample(self.memory, k=self.batch_size)
+
+    def __len__(self):
+        """Return the current size of internal memory."""
+        return len(self.memory)
+
+class OUNoise:
+    """Ornstein-Uhlenbeck process."""
+
+    def __init__(self, size, mu, theta, sigma):
+        """Initialize parameters and noise process."""
+        self.mu = mu * np.ones(size)
+        self.theta = theta
+        self.sigma = sigma
+        self.reset()
+
+    def reset(self):
+        """Reset the internal state (= noise) to mean (mu)."""
+        self.state = copy.copy(self.mu)
+
+    def sample(self):
+        """Update internal state and return it as a noise sample."""
+        x = self.state
+        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(len(x))
+        self.state = x + dx
+        return self.state
+
+class DDPGAgent():
     """Reinforcement Learning agent that learns using DDPG."""
     def __init__(self, task):
         self.task = task
@@ -215,3 +270,65 @@ class DDPG():
 
         new_weights = self.tau * local_weights + (1 - self.tau) * target_weights
         target_model.set_weights(new_weights)
+    
+    def get_score(self):
+        _score = 0
+        state = self.task.reset()
+        while True:
+            action = self.act(state)
+            next_state, reward, done = self.task.step(action)
+            _score = reward + self.gamma * _score 
+            state = next_state
+            if done:
+                break
+        
+        return _score
+
+
+class HoverTask():
+    """Task (environment) that defines the goal and provides feedback to the agent."""
+    def __init__(self, init_pose=None, init_velocities=None, 
+        init_angle_velocities=None, runtime=5., target_pos=None):
+        """Initialize a Task object.
+        Params
+        ======
+            init_pose: initial position of the quadcopter in (x,y,z) dimensions and the Euler angles
+            init_velocities: initial velocity of the quadcopter in (x,y,z) dimensions
+            init_angle_velocities: initial radians/second for each of the three Euler angles
+            runtime: time limit for each episode
+            target_pos: target/goal (x,y,z) position for the agent
+        """
+        # Simulation
+        self.sim = PhysicsSim(init_pose, init_velocities, init_angle_velocities, runtime) 
+        self.action_repeat = 3
+
+        self.state_size = self.action_repeat * 6
+        self.action_low = 0
+        self.action_high = 900
+        self.action_size = 4
+
+        # Goal
+        self.target_pos = target_pos if target_pos is not None else np.array([0., 0., 10.]) 
+
+    def get_reward(self):
+        """Uses current pose of sim to return reward."""
+        reward = 1.-.3*(abs(self.sim.pose[:3] - self.target_pos)).sum()
+        
+        return reward
+
+    def step(self, rotor_speeds):
+        """Uses action to obtain next state, reward, done."""
+        reward = 0
+        pose_all = []
+        for _ in range(self.action_repeat):
+            done = self.sim.next_timestep(rotor_speeds) # update the sim pose and velocities
+            reward += self.get_reward() 
+            pose_all.append(self.sim.pose)
+        next_state = np.concatenate(pose_all)
+        return next_state, reward, done
+
+    def reset(self):
+        """Reset the sim to start a new episode."""
+        self.sim.reset()
+        state = np.concatenate([self.sim.pose] * self.action_repeat) 
+        return state
