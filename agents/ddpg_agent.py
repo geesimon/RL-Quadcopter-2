@@ -273,22 +273,20 @@ class DDPGAgent():
 
     def get_score(self):
         """Calculate state value and"""
+        path = []
         state = self.task.reset()
         all_rewards = []
-        #_count = 0
         while True:
+            path.append(state[0:3])
             action = self.act(state)
             next_state, reward, done = self.task.step(action)
             all_rewards.append(reward)
             state = next_state
-            #print("distance:%f"%(self.task.get_distance()))
-            #_count += 1 
             if done:
-                #print("%d\n"%(_count))
                 break
         
         _score = 0
         for i in range(len(all_rewards) - 1, 0, -1):
             _score = all_rewards[i] + self.gamma * _score
 
-        return _score
+        return (_score, np.array(path))

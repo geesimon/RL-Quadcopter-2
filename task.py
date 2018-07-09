@@ -16,7 +16,7 @@ class MoveToTask():
         """
         # Simulation
         self.sim = PhysicsSim(init_pose, init_velocities, init_angle_velocities, runtime) 
-        self.action_repeat = 1
+        self.action_repeat = 3
 
         self.state_size = self.action_repeat * 6
         self.action_low = 0
@@ -35,7 +35,7 @@ class MoveToTask():
         done = self.sim.next_timestep(rotor_speeds)
         if done:
             """Out of range, give a big punishment"""
-            return (True, -1000)
+            return (True, -1000.0)
 
         new_dist = self.get_distance(self.sim.pose[0:3], self.target_pos)
         old_dist = self.get_distance(self.old_pose[0:3], self.target_pos)        
@@ -44,7 +44,7 @@ class MoveToTask():
         
         if new_dist < 0.1: 
             """Reach target, give a big reward"""
-            return (True, 1000)
+            return (True, 1000.0)
         else:
             """Reward each step on how much closer to the target"""
             return (False, old_dist - new_dist)
