@@ -277,7 +277,7 @@ class DDPGAgent():
         state = self.task.reset()
         all_rewards = []
         while True:
-            path.append(state[0:3])
+            path.append(state)
             action = self.act(state)
             next_state, reward, done = self.task.step(action)
             all_rewards.append(reward)

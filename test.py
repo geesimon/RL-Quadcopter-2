@@ -16,13 +16,13 @@ for i_episode in range(num_episodes):
     while True:
         action = agent.act(state)
         next_state, reward, done = task.step(action)
-        #print(reward)
+        print(reward)
         agent.step(action, reward, next_state, done)
         state = next_state
         if done:
             rewards[i_episode],  path = agent.get_score()
-            dist = task.get_distance(task.sim.pose[0:3], task.target_pos)
-            print("\rEpisode = {:4d}, score = {:7.3f} distance = {:7.3f}".format(i_episode + 1, 
-                  rewards[i_episode], dist), end="")
+            #dist = task.get_distance(task.sim.pose[0:3], task.target_pos)
+            print("\rEpisode = {:4d}, score = {:7.3f} z = {:7.3f}".format(i_episode + 1, 
+                  rewards[i_episode], task.sim.pose[2]), end="")
             break
-    sys.stdout.flush()
+    #sys.stdout.flush()

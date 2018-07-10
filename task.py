@@ -16,12 +16,13 @@ class MoveToTask():
         """
         # Simulation
         self.sim = PhysicsSim(init_pose, init_velocities, init_angle_velocities, runtime) 
-        self.action_repeat = 3
+        self.action_repeat = 1
 
         self.state_size = self.action_repeat * 6
         self.action_low = 0
         self.action_high = 900
         self.action_size = 4
+        self.init_pose = self.sim.pose 
         self.old_pose = self.sim.pose
 
         # Goal
@@ -30,11 +31,11 @@ class MoveToTask():
     def get_distance(self, a, b):
         return np.linalg.norm(a - b)
 
-    
-    def get_reward(self, rotor_speeds):    
+    """
+    def get_reward(self, rotor_speeds):
         done = self.sim.next_timestep(rotor_speeds)
         if done:
-            """Out of range, give a big punishment"""
+            #Out of range, give a big punishment
             return (True, -1000.0)
 
         new_dist = self.get_distance(self.sim.pose[0:3], self.target_pos)
@@ -43,11 +44,35 @@ class MoveToTask():
         self.old_pose = self.sim.pose
         
         if new_dist < 0.1: 
-            """Reach target, give a big reward"""
+            #Reach target, give a big reward
             return (True, 1000.0)
         else:
-            """Reward each step on how much closer to the target"""
+            #Reward each step on how much closer to the target
             return (False, old_dist - new_dist)
+    """
+
+    def get_reward(self, rotor_speeds):
+        done = self.sim.next_timestep(rotor_speeds)
+        if done :
+            if self.sim.time < self.sim.runtime:
+                #Out of scope
+                print("crash")
+                return (True, -1)
+            else:            
+                #Time out                   
+                return (True, 1)
+        
+        r = 1 - abs(self.sim.pose[2] - self.target_pos[2]) / 300
+        """Constraint movement to the z-axis and penlize based on how far a way from initial x and y"""
+        r = r - min(1, self.get_distance(self.sim.pose[0:2], self.init_pose[0:2]) / 300)
+        """reward for proposition of vertical velocity v[2]"""
+        r = r + self.sim.v[2]/10 
+
+        r = np.clip(r, -1, 1)
+
+        return (False, r)
+
+
 
     def step(self, rotor_speeds):
         """Uses action to obtain next state, reward, done."""
@@ -62,7 +87,12 @@ class MoveToTask():
                 break
             else:
                 pose_all.append(self.sim.pose)
-        
+            
+            print(rotor_speeds)
+            print(self.sim.pose)
+            print("reward %f"%(reward))
+
+
         next_state = np.concatenate(pose_all)
 
         return next_state, all_reward, done
